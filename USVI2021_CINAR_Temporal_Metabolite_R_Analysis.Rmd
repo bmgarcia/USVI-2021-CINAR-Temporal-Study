@@ -9,8 +9,8 @@ output: html_document
 ## Set working directory
 ```{r setup, include=FALSE}
 
+#Work PC directories
 knitr::opts_knit$set(root.dir = "Z:/Brianna/Projects/2022_0328_CINAR_BC")
-
 setwd("Z:/Brianna/Projects/2022_0328_CINAR_BC")
 
 ```
