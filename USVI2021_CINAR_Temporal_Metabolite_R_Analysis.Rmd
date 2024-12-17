@@ -10,8 +10,12 @@ output: html_document
 ```{r setup, include=FALSE}
 
 #Work PC directories
-knitr::opts_knit$set(root.dir = "Z:/Brianna/Projects/2022_0328_CINAR_BC")
-setwd("Z:/Brianna/Projects/2022_0328_CINAR_BC")
+#knitr::opts_knit$set(root.dir = "Z:/Brianna/Projects/2022_0328_CINAR_BC")
+#setwd("Z:/Brianna/Projects/2022_0328_CINAR_BC")
+
+#Laptop directories
+knitr::opts_knit$set(root.dir = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC")
+setwd("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC")
 
 ```
 
@@ -33,6 +37,7 @@ library(lubridate)
 library(knitr)
 library(kableExtra)
 library(purrr)
+library(patchwork)
 
 ```
 
@@ -51,7 +56,7 @@ if(!exists("site_lookup", envir = .GlobalEnv)){
     # site_colors <- viridisLite::cividis(n = length(site_lookup), direction = 1) %>%
     setNames(., names(site_lookup))
   sampling_time_lookup <- data.frame(sampling_time = c("dawn", "peak_photo"),
-                                     label = c("Dawn", "Peak photosynthesis")) %>%
+                                     label = c("Dawn", "Afternoon")) %>%
     tibble::deframe(.)
   sampling_time_colors <- pals::ocean.haline(n = length(sampling_time_lookup)) %>%
     setNames(., names(sampling_time_lookup))
@@ -103,8 +108,6 @@ rm(seq_pos,seq_neg, seq_mode_sidebyside,data)
 ## Subset temporal data for larger dataset
 ```{r subset temporal data}
 
-str(data_wFileName)
-
 unique(data_wFileName$Site)
 
 temporal <- data_wFileName %>%
@@ -125,7 +128,6 @@ temporal <- data_wFileName %>%
   mutate(Date = parse_date_time(Date, orders = "mdy"),
          date_time = ymd_hms(paste(Date, Time)))
 
-str(temporal)
 colnames(temporal)
 
 temporal_long <- temporal %>%
@@ -300,11 +302,9 @@ rownames(temporal.mat_outliersRmv_log2) <- temporal_wide_outliersRmv_log2$adapte
 ## Save table with outliers removed
 ```{r save outlier rmvd table}
 
-write.csv(temporal_long_wLimits,
-file = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/csv_outputs/USVI2021_CINARtemporal_BzCl_Exometabolite_QCd_longFormat_wMetadata.csv")
+#write.csv(temporal_long_wLimits_outliersRmv,file = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/csv outputs/USVI2021_CINARtemporal_BzCl_Exometabolite_QCd_longFormat_outliersRmvd_wMetadata.csv")
 
-write.csv(temporal.mat,
-          file = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/csv_outputs/USVI2021_CINARtemporal_BzCl_Exometabolite_QCd_wideFormat_noMetadata.csv")
+#write.csv(temporal.mat_outliersRmv_log2,file = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/csv outputs/USVI2021_CINARtemporal_BzCl_Exometabolite_QCd_wideFormat_outliersRmvd_log2_noMetadata.csv")
 
 ```
 
@@ -312,12 +312,12 @@ write.csv(temporal.mat,
 ## Bray-Curtis Dissimilarity Calculations
 ```{r bray curtis dissimilitaries}
 
-dist_usvi_mtab.d <- vegan::vegdist(temporal.mat, method = "bray", binary = FALSE, na.rm = TRUE)
+dist_usvi_mtab.d <- vegan::vegdist(temporal.mat_outliersRmv_log2, method = "bray", binary = FALSE, na.rm = TRUE)
 
-dist_usvi_mtab.df <- vegan::betadisper(dist_usvi_mtab.d, temporal_wide$Site) %>%
+dist_usvi_mtab.df <- vegan::betadisper(dist_usvi_mtab.d, temporal_wide_outliersRmv_log2$Site) %>%
   purrr::pluck("distances") %>%
   tibble::enframe(value = "dissimilarity", name = "adaptedDervLabel") %>%
-  dplyr::left_join(., (temporal_wide %>%
+  dplyr::left_join(., (temporal_wide_outliersRmv_log2 %>%
                          dplyr::select(adaptedDervLabel, sample_type, Date, Time, Sampling_Day, Site, rep_group) %>%
                          droplevels),
                    by = c("adaptedDervLabel" = "adaptedDervLabel")) %>%
@@ -341,6 +341,7 @@ g1 <- print(
   + scale_fill_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))
   + scale_y_continuous(expand = expansion(mult = c(0,0.1)), name = "Bray-Curtis dissimilarity")
   + scale_x_discrete(labels = site_lookup, name = "Site")
+  +labs(title = "A) Targeted Metabolome")
   + theme(axis.title = element_text(size = 12, face = "bold", colour = "grey30"),
           panel.background = element_blank(), panel.border = element_rect(fill = "NA", colour = "grey30"),
           panel.grid = element_blank(),
@@ -355,12 +356,18 @@ g1 <- print(
                                 override.aes = list(color = "black", stroke = 1, size = 2)))
 )
 
+#ggsave("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/figures/BrayCurtis_Dissimilarity_TargetedMetabolome_20241217.png",plot = last_plot(),height=4.25,width=6.5,units = "in",dpi=600)
+```
+
+### Bray-Curtis Dissimilarity Statistical Comparison between groups
+```{r bray curtis dissimilarity stats}
+
+
 
 ```
 
-
 ## PERMANOVA
-### Does sampling day matter? 
+### Categorical variables - does sampling day matter? 
 ```{r PERMANOVA sampling day}
 
 permanova_dm <- temporal_wide_outliersRmv_log2%>%
@@ -372,13 +379,13 @@ permanova_dm <- temporal_wide_outliersRmv_log2%>%
          )%>%
   drop_na() # Remove rows with NaN values before the transformation
 
-colnames(permanova_dm)
-
 permanova.mat <- permanova_dm%>%
   select(c("2'deoxycytidine":"valine"))%>%
   as.matrix()
 
 rownames(permanova.mat) <- permanova_dm$adaptedDervLabel
+
+set.seed(123)
 
 result_combined <- adonis2(
   permanova.mat ~ Site + sample_type + Sampling_Day,
@@ -420,323 +427,41 @@ results_df %>%
   add_header_above(c(" " = 1, "PERMANOVA Statistics" = 3))
 
 ```
-### Individual PERMANOVA per variable 
-```{r PERMANOVA per variable}
 
-permanova_dm <- temporal_wide_outliersRmv_log2%>%
-  select(adaptedDervLabel, 
-         Site, 
-         collection_depth_m,
-         Sampling_Day,
-         sample_type,
-         HOBO_temp_F,
-         HOBO_lumens,
-         NPOC,
-         TN,
-         Prochlorococcus,
-         Synechococcus,
-         Picoeukaryotes,
-         Unpigmented_cells,
-         c("2'deoxycytidine":"valine")
-  )%>%
-  drop_na()%>%
-    mutate(across(
-    .cols = c(HOBO_lumens, NPOC, TN, Prochlorococcus, Synechococcus, Picoeukaryotes, Unpigmented_cells),
-    .fns = ~ log2(. + 1)))
+## CAPSCALE model of continuous environmental & biological variables
+```{r linear model}
 
-colnames(permanova_dm)
+#Log2 transform continuous variables to make them on the same general scale
+cleanData <- temporal_wide_outliersRmv_log2 %>%
+  select(adaptedDervLabel, Site, sample_type, NPOC, TN, Prochlorococcus, Synechococcus, Picoeukaryotes,Unpigmented_cells, c("2'deoxycytidine":valine)) %>%
+  mutate(across(c(NPOC:Unpigmented_cells), ~log2(. + 1))) %>%
+  drop_na() #removal of rows that have NA
 
-permanova.mat <- permanova_dm%>%
+#Check for co-linearity of variables
+cor(cleanData[, c("Prochlorococcus", "Synechococcus", "Picoeukaryotes", "NPOC", "TN")])
+
+cleanData.mat <- cleanData%>%
   select(c("2'deoxycytidine":"valine"))%>%
   as.matrix()
 
-rownames(permanova.mat) <- permanova_dm$adaptedDervLabel
+rownames(cleanData.mat) <- cleanData$adaptedDervLabel
 
+#Calculate bray curtis dsitnace of metabolome data 
 set.seed(123)
-result_site <- adonis2(permanova.mat ~ Site, data = permanova_dm, method = "bray", permutations = 999)
+bray_dist <- vegan::vegdist(cleanData.mat, method = "bray", binary = FALSE, na.rm = TRUE)
 
+#Run RDA using capscale
 set.seed(123)
-result_depth <- adonis2(permanova.mat ~ collection_depth_m, data = permanova_dm, method = "bray", permutations = 999)
+db_rda <- capscale(bray_dist ~ Site + sample_type + Prochlorococcus + Picoeukaryotes + NPOC + TN, data = cleanData)
+summary(db_rda)
 
+#Calculate significance with an ANOVA
 set.seed(123)
-result_day <- adonis2(permanova.mat ~ Sampling_Day, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_type <- adonis2(permanova.mat ~ sample_type, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_temp <- adonis2(permanova.mat ~ HOBO_temp_F, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_light <- adonis2(permanova.mat ~ HOBO_lumens, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_npoc <- adonis2(permanova.mat ~ NPOC, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_tn <- adonis2(permanova.mat ~ TN, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_pro <- adonis2(permanova.mat ~ Prochlorococcus, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_syn <- adonis2(permanova.mat ~ Synechococcus, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_pico <- adonis2(permanova.mat ~ Picoeukaryotes, data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_hetero <- adonis2(permanova.mat ~ Unpigmented_cells , data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_site_type <- adonis2(permanova.mat ~ Site:sample_type , data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_site_day <- adonis2(permanova.mat ~ Site:Sampling_Day , data = permanova_dm, method = "bray", permutations = 999)
-
-set.seed(123)
-result_site_type_day <- adonis2(permanova.mat ~ Site:sample_type:Sampling_Day , data = permanova_dm, method = "bray", permutations = 999)
-
-results_df <- data.frame(
-  Factor = c("Sampling site",
-              "Collection depth (m)",
-              "Sampling day",
-              "Sampling time (dawn vs. afternoon)",
-              "Temperature (F)",
-              "Light (lumens)",
-              "Total organic carbon",
-              "Total nitrogen",
-              "Prochlorococcus",
-             "Synechococcus",
-             "Picoeukaryotes",
-             "Heterotrophic microbes",
-             "Sampling site:Sampling time of day",
-             "Sampling site:Sampling day",
-             "Sampling site:Sampling time of day:Sampling day"),
-  F_value = c(
-              result_site$F[1],
-              result_depth$F[1],
-              result_day$F[1],
-              result_type$F[1],
-              result_temp$F[1],
-              result_light$F[1],
-              result_npoc$F[1],
-              result_tn$F[1],
-              result_pro$F[1],
-              result_syn$F[1],
-              result_pico$F[1],
-              result_hetero$F[1],
-              result_site_type$F[1],
-              result_site_day$F[1],
-              result_site_type_day$F[1]),
-  R2 = c(
-          result_site$R2[1],
-          result_depth$R2[1],
-          result_day$R2[1],
-          result_type$R2[1],
-          result_temp$R2[1],
-          result_light$R2[1],
-          result_npoc$R2[1],
-          result_tn$R2[1],
-          result_pro$R2[1],
-         result_syn$R2[1],
-         result_pico$R2[1],
-         result_hetero$R2[1],
-         result_site_type$R2[1],
-         result_site_day$R2[1],
-         result_site_type_day$R2[1]),
-  P_value = c(
-              result_site$`Pr(>F)`[1],
-              result_depth$`Pr(>F)`[1],
-              result_day$`Pr(>F)`[1],
-              result_type$`Pr(>F)`[1],
-              result_temp$`Pr(>F)`[1],
-              result_light$`Pr(>F)`[1],
-              result_npoc$`Pr(>F)`[1],
-              result_tn$`Pr(>F)`[1],
-              result_pro$`Pr(>F)`[1],
-              result_syn$`Pr(>F)`[1],
-              result_pico$`Pr(>F)`[1],
-              result_hetero$`Pr(>F)`[1],
-              result_site_type$`Pr(>F)`[1],
-              result_site_day$`Pr(>F)`[1],
-              result_site_type_day$`Pr(>F)`[1]))
-
-print(results_df)
-
-# Format the results_df for manuscript presentation
-results_df %>%
-  mutate(
-    F_value = round(F_value, 2),
-    R2 = round(R2, 3),
-    P_value = ifelse(P_value < 0.001, "<0.001", round(P_value, 3))
-  ) %>%
-  kable(
-    format = "html",  # Change to "latex" for LaTeX documents
-    col.names = c("Factor", "F Value", "R²", "P Value"),
-    caption = "Table 1. Targeted metabolome PERMANOVA results for environmental and biological variables",
-    align = "l"  # Center align all columns
-  ) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
-    full_width = FALSE,
-    position = "center"
-  ) %>%
-  column_spec(2:4, bold = TRUE) %>%
-  add_header_above(c(" " = 1, "PERMANOVA Statistics" = 3))
+anova(db_rda, by = "terms")
 
 ```
-
-### Single PERMANOVA with all variables, log2 transform 
-```{r PERMANOVA single log2 xform}
-
-permanova_dm <- temporal_wide_outliersRmv_log2%>%
-  select(adaptedDervLabel, 
-         Site, 
-         collection_depth_m,
-         Sampling_Day,
-         sample_type,
-         HOBO_temp_F,
-         HOBO_lumens,
-         NPOC,
-         TN,
-         Prochlorococcus,
-         Synechococcus,
-         Picoeukaryotes,
-         Unpigmented_cells,
-         c("2'deoxycytidine":"valine")
-         )%>%
-  drop_na() %>%  # Remove rows with NaN values before the transformation
-  mutate(across(
-    .cols = c(HOBO_lumens, NPOC, TN, Prochlorococcus, Synechococcus, Picoeukaryotes, Unpigmented_cells),
-    .fns = ~ log2(. + 1)))
-
-colnames(permanova_dm)
-
-permanova.mat <- permanova_dm%>%
-  select(c("2'deoxycytidine":"valine"))%>%
-  as.matrix()
-
-rownames(permanova.mat) <- permanova_dm$adaptedDervLabel
-
-set.seed(123)
-
-result_combined <- adonis2(
-  permanova.mat ~ Site + Sampling_Day + sample_type +
-    HOBO_lumens + HOBO_temp_F + collection_depth_m +
-    NPOC + TN + Prochlorococcus + Synechococcus + Picoeukaryotes +
-    Unpigmented_cells + Site:sample_type + Site:Sampling_Day + Site:sample_type:Sampling_Day,
-  data = permanova_dm,
-  method = "bray",
-  permutations = 999,
-  by = "terms"
-)
-
-print(result_combined)
-
-# Extract results from the combined PERMANOVA model
-results_df <- data.frame(
-  Factor = rownames(result_combined),  # Automatically uses the factor names from the combined model
-  F_value = result_combined$F,        # Extract F-values
-  R2 = result_combined$R2,            # Extract R² values
-  P_value = result_combined$`Pr(>F)`  # Extract p-values
-)
-
-# Format the results_df for manuscript presentation
-results_df %>%
-  mutate(
-    F_value = round(F_value, 2),
-    R2 = round(R2, 3),
-    P_value = ifelse(P_value < 0.001, "<0.001", round(P_value, 3))
-  ) %>%
-  kable(
-    format = "html",  # Change to "latex" for LaTeX documents
-    col.names = c("Factor", "F Value", "R²", "P Value"),
-    caption = "Table 1. Targeted metabolome PERMANOVA results for environmental and biological variables",
-    align = "l"  # Center align all columns
-  ) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
-    full_width = FALSE,
-    position = "center"
-  ) %>%
-  column_spec(2:4, bold = TRUE) %>%
-  add_header_above(c(" " = 1, "PERMANOVA Statistics" = 3))
-```
-
-### Single PERMANOVA with all variables, non-transformed
-```{r PERMANOVA single raw}
-permanova_dm <- temporal_wide_outliersRmv_log2%>%
-  select(adaptedDervLabel, 
-         Site, 
-         collection_depth_m,
-         Sampling_Day,
-         sample_type,
-         HOBO_temp_F,
-         HOBO_lumens,
-         NPOC,
-         TN,
-         Prochlorococcus,
-         Synechococcus,
-         Picoeukaryotes,
-         Unpigmented_cells,
-         c("2'deoxycytidine":"valine")
-  )%>%
-  drop_na()
-
-colnames(permanova_dm)
-
-permanova.mat <- permanova_dm%>%
-  select(c("2'deoxycytidine":"valine"))%>%
-  as.matrix()
-
-rownames(permanova.mat) <- permanova_dm$adaptedDervLabel
-
-set.seed(123)
-
-result_combined <- adonis2(
-  permanova.mat ~ Site + Sampling_Day + sample_type +
-    HOBO_lumens + HOBO_temp_F + collection_depth_m +
-    NPOC + TN + Prochlorococcus + Synechococcus + Picoeukaryotes +
-    Unpigmented_cells + Site:sample_type + Site:Sampling_Day + Site:sample_type:Sampling_Day,
-  data = permanova_dm,
-  method = "bray",
-  permutations = 999
-)
-
-print(result_combined)
-
-# Extract results from the combined PERMANOVA model
-results_df <- data.frame(
-  Factor = rownames(result_combined),  # Automatically uses the factor names from the combined model
-  F_value = result_combined$F,        # Extract F-values
-  R2 = result_combined$R2,            # Extract R² values
-  P_value = result_combined$`Pr(>F)`  # Extract p-values
-)
-
-# Format the results_df for manuscript presentation
-results_df %>%
-  mutate(
-    F_value = round(F_value, 2),
-    R2 = round(R2, 3),
-    P_value = ifelse(P_value < 0.001, "<0.001", round(P_value, 3))
-  ) %>%
-  kable(
-    format = "html",  # Change to "latex" for LaTeX documents
-    col.names = c("Factor", "F Value", "R²", "P Value"),
-    caption = "Table 1. Targeted metabolome PERMANOVA results for environmental and biological variables",
-    align = "l"  # Center align all columns
-  ) %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
-    full_width = FALSE,
-    position = "center"
-  ) %>%
-  column_spec(2:4, bold = TRUE) %>%
-  add_header_above(c(" " = 1, "PERMANOVA Statistics" = 3))
-
-```
-## Kruskal-Wallis: Within Site/Sampling Time but across days
+## Kruskal-Wallis
+### Kruskal-Wallis: Within Site/Sampling Time but across days
 Since metabolite samples were measured at the same three sites, at the same time of day (dawn and afternoon) every day over four days, we need to test if the metabolite concentrations within a site/sampling time (e.g., Tektite - dawn) vary over those four days. If they do, metabolites will need to be further investigate on a day-by-day basis. If not, then metabolites can be grouped by their sampling time across the four days, thus increasing our statistical power when investigating differences between sampling time. 
 ```{r KW across days}
 
@@ -779,6 +504,7 @@ print(summary_table)
 
 ```
 
+#### Count number of significant metabolites
 ```{r count_significant_metabolites, echo=FALSE}
 
 # Calculate the count of significant metabolites
@@ -790,7 +516,8 @@ num_significant <- summary_table %>%
 cat("The number of metabolites with an adjusted p-value (FDR) < 0.05 within a Site/Sampling Time but across days is:", num_significant)
 
 ```
-## Kruskal-Wallis: Within Site between sampling time (dawn and afternoon)
+
+### Kruskal-Wallis: Within Site between sampling time (dawn and afternoon)
 Since metabolite concentrations did not vary significantly post-FDR correction, metabolites can be grouped by their site and sampling time and tested for signficant differences in concentration between dawn and afternoon. 
 
 ```{r KW sampling time}
@@ -829,20 +556,20 @@ summary_table <- purrr::imap_dfr(
 # View the summary table
 print(summary_table)
 
-summary_table%>%filter(FDR_adjusted_p < 0.05)%>%view()
-
 sig_FDR_mtabs <- summary_table%>%
-  filter(FDR_adjusted_p < 0.05)%>%
-  select(metabolites)%>%
-  unique()%>%
-  deframe()
+  filter(FDR_adjusted_p < 0.05)
 
 ```
 
+#### Boxplots - significant metabolites dawn vs. afternoon
 ```{r plot significant mtabs}
 
+x <- sig_FDR_mtabs%>%
+  select(metabolites)%>%
+  deframe() 
+
 temporal_long_wLimits_outliersRmv%>%
-  filter(metabolites %in% sig_FDR_mtabs)%>%
+  filter(metabolites %in% x)%>%
   ggplot(aes(x=Site,y=log2_concen,color=Site,linetype = sample_type),linewidth =2)+
   geom_boxplot()+
   facet_wrap(~metabolites,scales= "free")+
@@ -850,6 +577,122 @@ temporal_long_wLimits_outliersRmv%>%
   scale_color_manual(values = CINAR_temporal_palette)+
   theme_bw(base_size = 12)
 
+
+```
+
+#### Heatpmap - Significant metaboltites dawn vs. afternoon
+```{r sig mtab heatmaps}
+
+# Create individual heatmaps for each group
+
+x <- sig_FDR_mtabs%>%
+  filter(site == "Tektite")%>%
+  select(metabolites)%>%
+  deframe()
+
+heatmap1 <- temporal_long_wLimits_outliersRmv%>%
+  filter(Site == "Tektite", metabolites %in% x )%>%
+  mutate(date_time = factor(date_time))%>%
+  group_by(metabolites,date_time,sample_type)%>%
+  mutate(median_conc = round(median(concentration),3),
+         forHeatmap = if_else(median_conc < LOD, NA, median_conc))%>%
+  ggplot(aes(date_time, metabolites, fill = log2(forHeatmap+1))) +
+  geom_tile(color="black", aes(fill = forHeatmap)) +
+  scale_fill_viridis(trans = 'log', na.value = "white", direction = 1,name = NULL,
+                     labels = label_number(accuracy = 0.001))+ # Round to 2 decimal places  
+  theme_minimal(base_size = 14)+
+  theme(legend.position = "right", 
+        text = element_text(colour = "black"),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        plot.margin = margin(10, 10, 10, 10),
+        panel.border = element_rect(fill = NA, color = "black", size = 1),
+        panel.grid = element_blank())         # Remove grid lines
+
+x <- sig_FDR_mtabs%>%
+  filter(site == "Yawzi")%>%
+  select(metabolites)%>%
+  deframe()
+
+heatmap2 <- temporal_long_wLimits_outliersRmv%>%
+  filter(Site == "Yawzi", metabolites %in% x )%>%
+  mutate(date_time = factor(date_time))%>%
+  group_by(metabolites,date_time,sample_type)%>%
+  mutate(median_conc = round(median(concentration),3),
+         forHeatmap = if_else(median_conc < LOD, NA, median_conc))%>%
+  ggplot(aes(date_time, metabolites, fill = log2(forHeatmap+1))) +
+  geom_tile(color="black", aes(fill = forHeatmap)) +
+  scale_fill_viridis(trans = 'log', na.value = "white", direction = 1,name = NULL,
+                     labels = label_number(accuracy = 0.001))+ # Round to 2 decimal places  
+  theme_minimal(base_size = 14)+
+    theme(legend.position = "right", 
+        text = element_text(colour = "black"),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        plot.margin = margin(10, 10, 10, 10),
+        panel.border = element_rect(fill = NA, color = "black", size = 1),
+        panel.grid = element_blank())         # Remove grid lines
+
+x <- sig_FDR_mtabs%>%
+  filter(site == "LB_seagrass")%>%
+  select(metabolites)%>%
+  deframe()
+
+heatmap3 <- temporal_long_wLimits_outliersRmv%>%
+  filter(Site == "LB_seagrass", metabolites %in% x )%>%
+  mutate(date_time = factor(date_time))%>%
+  group_by(metabolites,date_time,sample_type)%>%
+  mutate(median_conc = round(median(concentration),3),
+         forHeatmap = if_else(median_conc < LOD, NA, median_conc))%>%
+  ggplot(aes(date_time, metabolites, fill = log2(forHeatmap+1))) +
+  geom_tile(color="black", aes(fill = forHeatmap)) +
+  scale_fill_viridis(trans = 'log', na.value = "white", direction = 1,name = NULL,
+                     labels = label_number(accuracy = 0.001))+ # Round to 2 decimal places  
+  theme_minimal(base_size = 14)+
+  labs(x="Sampling Day")+
+      theme(legend.position = "right", 
+        text = element_text(colour = "black"),
+        axis.title.y = element_blank(),
+        plot.margin = margin(10, 10, 10, 10),
+        panel.border = element_rect(fill = NA, color = "black", size = 1),
+        panel.grid = element_blank())+         # Remove grid lines
+  scale_x_discrete(labels=c('Day1','Day1',
+                            'Day2','Day2',
+                            'Day3','Day3',
+                            'Day4','Day4'))
+
+# Create the small dawn/afternoon heatmap
+dawn_heatmap <- temporal_long_wLimits_outliersRmv%>%
+    mutate(date_time = factor(date_time))%>%
+  ggplot(aes(x = date_time, y = 1, fill = sample_type)) +
+  geom_tile() +
+  scale_fill_manual(values = c("dawn" = "black", "peak_photo" = "white")) +
+  theme_bw() + # Remove all grid, text, and axes
+    theme(legend.position = "none", 
+        text = element_text(colour = "black"),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank(),
+        plot.margin = margin(2, 2, 2, 2),
+        panel.border = element_rect(fill = NA, color = "black", size = 1),
+        panel.grid = element_blank())         # Remove grid lines    
+
+# Combine the heatmaps with white space in between
+combined_plot <- heatmap1 / heatmap2 / heatmap3 / dawn_heatmap+ 
+  plot_layout(ncol = 1, heights = c(1, 1, 1,0.075)) & 
+  plot_annotation(theme = theme(plot.background = element_rect(fill = "white", color = NA)))
+
+# Show the final plot
+combined_plot
+
+#ggsave("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/figures/Temporally_Significant_TargetedMetabolites_log10_concentration_20241217.png",plot = last_plot(),height=8.5,width=11,units = "in",dpi=600)
 
 ```
 
