@@ -359,10 +359,96 @@ g1 <- print(
 #ggsave("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/figures/BrayCurtis_Dissimilarity_TargetedMetabolome_20241217.png",plot = last_plot(),height=4.25,width=6.5,units = "in",dpi=600)
 ```
 
-### Bray-Curtis Dissimilarity Statistical Comparison between groups
+### Bray-Curtis Dissimilarity Statistical Comparison within sites across time
 ```{r bray curtis dissimilarity stats}
 
+# Function to perform Kruskal-Wallis test and FDR adjustment for a given site
+KW_samplingTime_dissimiliarty <- function(data, site_filter) {
+  data %>%
+    ungroup() %>%
+    filter(Site == site_filter) %>%
+    summarise(
+      Kruskal_p = kruskal.test(dissimilarity ~ sample_type)$p.value,
+      .groups = "drop")
+}
 
+# List of subsets with corresponding labels
+subset_list <- list(
+  kw_SG = list(Site = "LB_seagrass"),
+  kw_TK = list(Site = "Tektite"),
+  kw_YZ = list(Site = "Yawzi")
+)
+
+# Combine all results into one summary table
+set.seed(123)
+summary_table <- purrr::imap_dfr(
+  subset_list,
+  ~ KW_samplingTime_dissimiliarty(dist_usvi_mtab.df, .x$Site) %>%
+      mutate(Site = .x$Site) # Use .x$Site to extract the site name
+)
+
+# View the summary table
+print(summary_table)
+
+```
+### Bray-Curtis Dissimilarity Statistical Comparison between sites within time
+```{r KW and Wilcoxon test across sites within time}
+
+# Function to perform Kruskal-Wallis test and FDR adjustment for a given sampling time
+run_kruskal_time_fdr <- function(data, sample_type_filter) {
+  data %>%
+    ungroup() %>%
+    filter(sample_type == sample_type_filter) %>%
+    summarise(
+      Kruskal_p = kruskal.test(dissimilarity ~ Site)$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      FDR_adjusted_p = p.adjust(Kruskal_p, method = "fdr"),
+      sig_05_fdr = FDR_adjusted_p < 0.05
+    )
+}
+
+# Function to perform pairwise Wilcoxon rank-sum tests for a given sampling time
+run_pairwise_tests <- function(data, sample_type_filter) {
+  # Filter data for the specific sampling time
+  filtered_data <- data %>%
+    filter(sample_type == sample_type_filter)
+  
+  # Ensure 'dissimilarity' and 'Site' are vectors
+  pairwise_result <- pairwise.wilcox.test(
+    x = filtered_data$dissimilarity,
+    g = filtered_data$Site,
+    p.adjust.method = "fdr"
+  )
+  
+  # Convert results to a tidy dataframe
+  broom::tidy(pairwise_result) %>%
+    mutate(samplingTime = sample_type_filter)
+}
+
+# List of subsets with corresponding labels
+subset_list <- list(
+  kw_dawn = list(samplingTime = "dawn"),
+  kw_afternoon = list(samplingTime = "peak_photo")
+)
+
+# Run Kruskal-Wallis tests
+summary_table <- purrr::imap_dfr(
+  subset_list,
+  ~ run_kruskal_time_fdr(dist_usvi_mtab.df, .x$samplingTime) %>%
+      mutate(samplingTime = .x$samplingTime) 
+)
+
+# Run pairwise Wilcoxon tests for significant Kruskal-Wallis results
+pairwise_results <- purrr::imap_dfr(
+  subset_list,
+  ~ run_pairwise_tests(dist_usvi_mtab.df, .x$samplingTime)
+)
+
+# View the results
+print(summary_table)  # Kruskal-Wallis test results
+print(pairwise_results)  # Pairwise Wilcoxon test results
 
 ```
 
