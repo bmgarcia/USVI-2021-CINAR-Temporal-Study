@@ -20,7 +20,7 @@ setwd("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC")
 ```
 
 ## Load required packages
-```{r packages}
+```{r packages, message=FALSE}
 
 library(RColorBrewer)
 library(gridExtra)
@@ -73,7 +73,7 @@ if(!exists("site_lookup", envir = .GlobalEnv)){
 # Load in data and prep for statistical analysis
 
 ## Load data
-```{r load data}
+```{r load data, message=FALSE}
 
 data <- read_csv('./Analysis/MATLAB/BC_qaqc/20230605/temporal_mergedTable_metCols_CINARBC_20230605_BMG.csv')
 data <- as_tibble(data,rownames="rowID_full")
@@ -108,8 +108,6 @@ rm(seq_pos,seq_neg, seq_mode_sidebyside,data)
 ## Subset temporal data for larger dataset
 ```{r subset temporal data}
 
-unique(data_wFileName$Site)
-
 temporal <- data_wFileName %>%
   ungroup()%>%
   add_count(rep_group)%>%
@@ -127,8 +125,6 @@ temporal <- data_wFileName %>%
   mutate(Site_abv = factor(Site_abv, levels = c("YZ", "TK","SG")))%>%
   mutate(Date = parse_date_time(Date, orders = "mdy"),
          date_time = ymd_hms(paste(Date, Time)))
-
-colnames(temporal)
 
 temporal_long <- temporal %>%
   pivot_longer(cols="2'deoxycytidine":"valine",names_to="metabolites",values_to="concentration",values_drop_na=TRUE)
@@ -276,20 +272,14 @@ for (plot in plots) print(plot)
 ## Remove outliers from dataset 
 ```{r remove outliers}
 
-unique(temporal_long_wLimits$adaptedDervLabel)
-
 temporal_long_wLimits_outliersRmv <- temporal_long_wLimits%>%
   ungroup()%>%
   filter(adaptedDervLabel!= "CINAR_BC_73")%>%
   mutate(log2_concen = log2(concentration+1))
 
-colnames(temporal_long_wLimits_outliersRmv)
-
 temporal_wide_outliersRmv_log2 <- temporal_long_wLimits_outliersRmv%>%
   select(-c(concentration,QuantFlag,LODflag,LOD,LOQ))%>%
   pivot_wider(names_from = "metabolites",values_from = "log2_concen")
-
-colnames(temporal_wide_outliersRmv_log2)
 
 temporal.mat_outliersRmv_log2 <- temporal_wide_outliersRmv_log2%>%
   select(c("2'deoxycytidine":"valine"))%>%
@@ -305,6 +295,108 @@ rownames(temporal.mat_outliersRmv_log2) <- temporal_wide_outliersRmv_log2$adapte
 #write.csv(temporal_long_wLimits_outliersRmv,file = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/csv outputs/USVI2021_CINARtemporal_BzCl_Exometabolite_QCd_longFormat_outliersRmvd_wMetadata.csv")
 
 #write.csv(temporal.mat_outliersRmv_log2,file = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/csv outputs/USVI2021_CINARtemporal_BzCl_Exometabolite_QCd_wideFormat_outliersRmvd_log2_noMetadata.csv")
+
+```
+#Data summary
+
+## HOBO Logger (Light and Temperature)
+Note: Why does Yawzi reef have such lower lumens in the afternoon? Sampling order appears to be TK, YZ, and SG.
+```{r HOBO}
+
+temporal_long_wLimits_outliersRmv%>%
+  group_by(Site,sample_type)%>%
+  ggplot(aes(x=Site,y=HOBO_lumens,color=Site,linetype = sample_type))+
+  geom_boxplot()+
+  theme_bw()+
+  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))
+
+temporal_long_wLimits_outliersRmv %>%
+  group_by(sample_type, Site) %>%
+  summarise(
+    across(
+      c(HOBO_lumens, HOBO_temp_F), 
+      list(mean = ~mean(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE)), 
+      .names = "{.col}_{.fn}"
+    )
+  ) %>%
+  mutate(
+    HOBO_lumens = paste0(round(HOBO_lumens_mean, 2), " ± ", round(HOBO_lumens_sd, 2)),
+    HOBO_temp_F = paste0(round(HOBO_temp_F_mean, 2), " ± ", round(HOBO_temp_F_sd, 2))
+  ) %>%
+  select(sample_type, Site, HOBO_lumens, HOBO_temp_F)
+
+```
+
+## NPOC and TN
+```{r NPOC TN}
+
+temporal_long_wLimits_outliersRmv%>%
+  pivot_longer(cols = c(NPOC, TN), names_to = "water_chem", values_to = "concen_uM")%>%
+  group_by(Site,sample_type)%>%
+  ggplot(aes(x=Site,y=concen_uM,color=Site,linetype = sample_type))+
+  geom_boxplot()+
+  facet_wrap(~water_chem, scales="free",ncol=1)+
+  theme_bw()+
+  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))
+
+temporal_long_wLimits_outliersRmv %>%
+  group_by(sample_type, Site) %>%
+  summarise(
+    across(
+      c(NPOC, TN), 
+      list(mean = ~mean(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE)), 
+      .names = "{.col}_{.fn}"
+    )
+  ) %>%
+  mutate(
+    NPOC = paste0(round(NPOC_mean, 2), " ± ", round(NPOC_sd, 2)),
+    TN = paste0(round(TN_mean, 2), " ± ", round(TN_sd, 2))
+  ) %>%
+  select(sample_type, Site, NPOC, TN)
+
+
+```
+## Flow cytometry
+```{r flow cytrometry}
+
+temporal_long_wLimits_outliersRmv%>%
+  pivot_longer(cols = c(Prochlorococcus, Synechococcus,Unpigmented_cells,Picoeukaryotes), names_to = "fcm_data", values_to = "counts")%>%
+  group_by(Site,sample_type)%>%
+  select(Site,sample_type,fcm_data,counts)%>%
+  drop_na()%>%
+  ggplot(aes(x=Site,y=counts,color=Site,linetype = sample_type))+
+  geom_boxplot()+
+  facet_wrap(~fcm_data, scales="free",ncol=1)+
+  theme_bw()+
+  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))
+
+temporal_long_wLimits_outliersRmv %>%
+  group_by(sample_type, Site) %>%
+  summarise(
+    across(
+      c(Prochlorococcus, Synechococcus, Unpigmented_cells, Picoeukaryotes), 
+      list(mean = ~mean(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE)), 
+      .names = "{.col}_{.fn}"
+    )
+  ) %>%
+  mutate(
+    Prochlorococcus = paste0(round(Prochlorococcus_mean, 2), " ± ", round(Prochlorococcus_sd, 2)),
+    Synechococcus = paste0(round(Synechococcus_mean, 2), " ± ", round(Synechococcus_sd, 2)),
+    Unpigmented_cells = paste0(round(Unpigmented_cells_mean, 2), " ± ", round(Unpigmented_cells_sd, 2)),
+    Picoeukaryotes = paste0(round(Picoeukaryotes_mean, 2), " ± ", round(Picoeukaryotes_sd, 2))
+  ) %>%
+  select(sample_type, Site, Prochlorococcus, Synechococcus, Unpigmented_cells, Picoeukaryotes)
+
+```
+
+## Metabolite counts and concentration ranges
+```{r mtab summary}
+
+temporal_long_wLimits_outliersRmv %>%
+  group_by(Site, sample_type, metabolites) %>%
+  summarise(mean_concentration = mean(concentration), LOD = first(LOD), .groups = "drop") %>%
+  group_by(Site, sample_type) %>%
+  summarise(count_above_LOD = sum(mean_concentration > LOD), .groups = "drop")
 
 ```
 
@@ -785,63 +877,63 @@ combined_plot
 # Manuscript figures
 ## Figure 1. Map of St. John USVI
 ```{r figure 1}
-
-# Raw shapefiles
-usa <- st_read("./Analysis/R/scripts/USVI_map/stanford-vt021tk4894-shapefile/","vt021tk4894")
-sttstj <- st_read("./Analysis/R/scripts/USVI_map/stsj_fin")
-nps <- st_read("./Analysis/R/scripts/USVI_map/NPS_-_Land_Resources_Division_Boundary_and_Tract_Data_Service")
-
-# site metadata
-
-temporal_sites <- read.table("./BC_CoralSeagrass_Temporal/temporal_sites.txt", sep = "\t", header = TRUE)
-temporal_sites$Site <- factor(temporal_sites$Site, levels = c( "Yawzi", "Tektite","LB_seagrass"))
-usvi <- usa %>% filter(state == "United States Virgin Islands")
-
-reefZONE <- sttstj %>%
-  filter(ZONE %in% c("Forereef", "Reef Crest", "Backreef"))
-
-vinp <- nps %>% filter(PARKNAME == "Virgin Islands")
-
-#plot
-temporal_map <- ggplot() +
-  geom_sf(data = usvi, fill = "#e5dccd",color = "#6699CC") +
-  geom_sf(data = reefZONE, fill = "#cc6677", color = "#882255",alpha=0.5) +
-  geom_sf(data = vinp, fill = NA, color = "#117733", linewidth = 0.6) +
-  coord_sf(xlim = c(-64.8040, -64.655), ylim = c(18.2895, 18.378364), expand = FALSE) +
-  geom_point(data = temporal_sites, mapping = aes(x = Lon, y = Lat, fill = Site),colour="#333333", pch = 21, size = 3,alpha=0.9) +
-  scale_fill_manual(values = CINAR_temporal_palette) +
-  annotation_scale(location = "bl", width_hint = 0.2) +
-  theme(panel.grid.major = element_blank(), panel.background = element_rect(fill = "#6699CC"),legend.position = c(0.902, 0.21))+
-  labs(x = "Longitude",y="Latitude")+
-  geom_text() +
-  annotate("text", label = "St. John,\nU.S. Virgin Islands",x = -64.74, y = 18.34, size = 4, colour = "black",fontface=2)+
-  annotate("text", label = "Coral reef habitat",x = -64.785, y = 18.307, size = 3, colour = "#882255",fontface=2)+
-  annotate("text", label = "Virgin Islands \nNational Park",x = -64.715, y = 18.3585, size = 3, colour = "#117733",fontface=2)+
-  annotate("text", label = "Lameshur Bay",x = -64.735, y = 18.305, size = 3, colour = "black",fontface=2)
-
-temporal_map + geom_segment(aes(x = -64.735, y = 18.307, xend = -64.728, yend = 18.312),
-                            arrow = arrow(length = unit(0.01, "npc")))
+# 
+# # Raw shapefiles
+# usa <- st_read("./Analysis/R/scripts/USVI_map/stanford-vt021tk4894-shapefile/","vt021tk4894")
+# sttstj <- st_read("./Analysis/R/scripts/USVI_map/stsj_fin")
+# nps <- st_read("./Analysis/R/scripts/USVI_map/NPS_-_Land_Resources_Division_Boundary_and_Tract_Data_Service")
+# 
+# # site metadata
+# 
+# temporal_sites <- read.table("./BC_CoralSeagrass_Temporal/temporal_sites.txt", sep = "\t", header = TRUE)
+# temporal_sites$Site <- factor(temporal_sites$Site, levels = c( "Yawzi", "Tektite","LB_seagrass"))
+# usvi <- usa %>% filter(state == "United States Virgin Islands")
+# 
+# reefZONE <- sttstj %>%
+#   filter(ZONE %in% c("Forereef", "Reef Crest", "Backreef"))
+# 
+# vinp <- nps %>% filter(PARKNAME == "Virgin Islands")
+# 
+# #plot
+# temporal_map <- ggplot() +
+#   geom_sf(data = usvi, fill = "#e5dccd",color = "#6699CC") +
+#   geom_sf(data = reefZONE, fill = "#cc6677", color = "#882255",alpha=0.5) +
+#   geom_sf(data = vinp, fill = NA, color = "#117733", linewidth = 0.6) +
+#   coord_sf(xlim = c(-64.8040, -64.655), ylim = c(18.2895, 18.378364), expand = FALSE) +
+#   geom_point(data = temporal_sites, mapping = aes(x = Lon, y = Lat, fill = Site),colour="#333333", pch = 21, size = 3,alpha=0.9) +
+#   scale_fill_manual(values = CINAR_temporal_palette) +
+#   annotation_scale(location = "bl", width_hint = 0.2) +
+#   theme(panel.grid.major = element_blank(), panel.background = element_rect(fill = "#6699CC"),legend.position = c(0.902, 0.21))+
+#   labs(x = "Longitude",y="Latitude")+
+#   geom_text() +
+#   annotate("text", label = "St. John,\nU.S. Virgin Islands",x = -64.74, y = 18.34, size = 4, colour = "black",fontface=2)+
+#   annotate("text", label = "Coral reef habitat",x = -64.785, y = 18.307, size = 3, colour = "#882255",fontface=2)+
+#   annotate("text", label = "Virgin Islands \nNational Park",x = -64.715, y = 18.3585, size = 3, colour = "#117733",fontface=2)+
+#   annotate("text", label = "Lameshur Bay",x = -64.735, y = 18.305, size = 3, colour = "black",fontface=2)
+# 
+# temporal_map + geom_segment(aes(x = -64.735, y = 18.307, xend = -64.728, yend = 18.312),
+#                             arrow = arrow(length = unit(0.01, "npc")))
 
 ```
 
 ```{r figure 1 zoom}
-
-#plot
-temporal_map_zoom <- ggplot() +
-  geom_sf(data = usvi, fill = "#e5dccd",color = "#6699CC") +
-  geom_sf(data = reefZONE, fill = "#cc6677", color = "#882255",alpha=0.5) +
-  geom_sf(data = vinp, fill = NA, color = "#117733", linewidth = 0.6) +
-  coord_sf(xlim = c(-64.727, -64.72), ylim = c(18.308, 18.320), expand = FALSE) +
-  geom_point(data = temporal_sites, mapping = aes(x = Lon, y = Lat, fill = Site),colour="#333333", pch = 21, size = 4,alpha=0.88) +
-  scale_fill_manual(values = CINAR_temporal_palette) +
-  annotation_scale(location = "bl", width_hint = 0.2) +
-  theme(panel.grid.major = element_blank(), panel.background = element_rect(fill = "#6699CC"),legend.position = "top",
-  axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
-  labs(x = "Longitude",y="Latitude")+
-  geom_text() +
-  annotate("text", label = "Great Lameshur Bay",x = -64.723, y = 18.315, size = 2.5, colour = "black",fontface=2)
-
-temporal_map_zoom
+# 
+# #plot
+# temporal_map_zoom <- ggplot() +
+#   geom_sf(data = usvi, fill = "#e5dccd",color = "#6699CC") +
+#   geom_sf(data = reefZONE, fill = "#cc6677", color = "#882255",alpha=0.5) +
+#   geom_sf(data = vinp, fill = NA, color = "#117733", linewidth = 0.6) +
+#   coord_sf(xlim = c(-64.727, -64.72), ylim = c(18.308, 18.320), expand = FALSE) +
+#   geom_point(data = temporal_sites, mapping = aes(x = Lon, y = Lat, fill = Site),colour="#333333", pch = 21, size = 4,alpha=0.88) +
+#   scale_fill_manual(values = CINAR_temporal_palette) +
+#   annotation_scale(location = "bl", width_hint = 0.2) +
+#   theme(panel.grid.major = element_blank(), panel.background = element_rect(fill = "#6699CC"),legend.position = "top",
+#   axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+#   labs(x = "Longitude",y="Latitude")+
+#   geom_text() +
+#   annotate("text", label = "Great Lameshur Bay",x = -64.723, y = 18.315, size = 2.5, colour = "black",fontface=2)
+# 
+# temporal_map_zoom
 
 ```
 
@@ -856,20 +948,20 @@ temporal_map_zoom
 ```
 
 ```{r removal map variables}
-
-rm(vinp,usvi,usa,sttstj,temporal_sites,reefZONE,nps)
+# 
+# rm(vinp,usvi,usa,sttstj,temporal_sites,reefZONE,nps)
 
 ```
 
 ## Figure 2.
-```{r figure 1}
-
-```
-## Figure 3. 
 ```{r figure 2}
 
 ```
-## Figure 4.
+## Figure 3. 
 ```{r figure 3}
+
+```
+## Figure 4.
+```{r figure 4}
 
 ```
