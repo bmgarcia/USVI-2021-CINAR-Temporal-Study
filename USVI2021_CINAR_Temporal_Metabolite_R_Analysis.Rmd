@@ -304,11 +304,22 @@ Note: Why does Yawzi reef have such lower lumens in the afternoon? Sampling orde
 ```{r HOBO}
 
 temporal_long_wLimits_outliersRmv%>%
-  group_by(Site,sample_type)%>%
-  ggplot(aes(x=Site,y=HOBO_lumens,color=Site,linetype = sample_type))+
-  geom_boxplot()+
+  group_by(Site,sample_type,Sampling_Day)%>%
+  ggplot(aes(x=Sampling_Day,y=HOBO_lumens,fill=Site,shape = sample_type))+
+  geom_point(size=3)+
+  scale_shape_manual(values = c(21,22))+
+  scale_fill_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))+
   theme_bw()+
-  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))
+  facet_wrap(~Site)
+
+temporal_long_wLimits_outliersRmv%>%
+  group_by(Site,sample_type)%>%
+  ggplot(aes(x=Site,y=HOBO_lumens,fill=Site,shape = sample_type))+
+  geom_point(size = 3)+
+  facet_wrap(~sample_type,scales = "free")+
+  scale_fill_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))+
+  scale_shape_manual(values = c(21,22))+
+  theme_bw()
 
 temporal_long_wLimits_outliersRmv %>%
   group_by(sample_type, Site) %>%
