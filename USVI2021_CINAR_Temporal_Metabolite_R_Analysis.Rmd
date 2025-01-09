@@ -10,12 +10,12 @@ output: html_document
 ```{r setup, include=FALSE}
 
 #Work PC directories
-#knitr::opts_knit$set(root.dir = "Z:/Brianna/Projects/2022_0328_CINAR_BC")
-#setwd("Z:/Brianna/Projects/2022_0328_CINAR_BC")
+knitr::opts_knit$set(root.dir = "Z:/Brianna/Projects/2022_0328_CINAR_BC")
+setwd("Z:/Brianna/Projects/2022_0328_CINAR_BC")
 
 #Laptop directories
-knitr::opts_knit$set(root.dir = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC")
-setwd("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC")
+#knitr::opts_knit$set(root.dir = "/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC")
+#setwd("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC")
 
 ```
 
@@ -885,6 +885,275 @@ combined_plot
 
 ```
 
+### Kruskal-Wallis: Between sites within a sampling timepoint
+
+```{r KW site}
+
+# Function to perform Kruskal-Wallis test and FDR adjustment for a given site
+KW_site<- function(data, time_filter) {
+  data %>%
+    ungroup() %>%
+    filter(sample_type == time_filter) %>%
+    group_by(metabolites) %>%
+    summarise(
+      Kruskal_p = kruskal.test(log2_concen ~ Site)$p.value,
+      .groups = "drop"
+      )
+}
+
+# List of subsets with corresponding labels
+subset_list <- list(
+  kw_dawn = list(sample_type = "dawn"),
+  kw_peak = list(sample_type = "peak_photo")
+)
+
+# Combine all results into one summary table
+set.seed(123)
+summary_table <- purrr::imap_dfr(
+  subset_list,
+  ~ KW_site(temporal_long_wLimits_outliersRmv, .x$sample_type) %>%
+      mutate(sample_type = .x$sample_type) # Use .x$sample_type to extract the sample_type name
+)
+
+# View the summary table
+print(summary_table)
+
+sig_KW_mtabs <- summary_table%>%
+  filter(Kruskal_p < 0.05)
+
+```
+### Pairwise Wilcoxon Rank Sum Test
+#### Dawn
+```{r site wilcoxon rank sum test}
+
+# Filter significant metabolites at dawn
+significant_metabolites <- sig_KW_mtabs %>%
+  filter(sample_type == "dawn") %>%
+  pull(metabolites)
+
+# Subset the original data for significant metabolites and "dawn" sample type
+dawn_data <- temporal_long_wLimits_outliersRmv %>%
+  filter(sample_type == "dawn", metabolites %in% significant_metabolites)
+
+# Perform pairwise Wilcoxon tests for each significant metabolite
+
+set.seed(123)
+pairwise_results <- dawn_data %>%
+  group_by(metabolites) %>%
+  summarise(
+    pairwise_wilcox = list(
+      pairwise.wilcox.test(
+        x = log2_concen,
+        g = Site,
+        p.adjust.method = "fdr"
+      )
+    ),
+    .groups = "drop"
+  )
+
+# View results
+pairwise_results <- pairwise_results %>%
+  mutate(pairwise_summary = map(pairwise_wilcox, ~ broom::tidy(.x)))
+
+# Optionally, flatten for easier inspection
+pairwise_summary <- pairwise_results %>%
+  unnest(pairwise_summary)%>%
+  filter(p.value < 0.05)%>%
+  group_by(metabolites)%>%
+  mutate(n = n(),
+         sample_type = "dawn")
+
+wilcoxon_Site_dawn_summary <- pairwise_summary
+
+# Print results
+print(wilcoxon_Site_dawn_summary)
+
+paste(length(unique(wilcoxon_Site_dawn_summary$metabolites)),"metabolites were found significant between sites at Dawn")
+
+sig_dawn_site_mtabNames <- unique(wilcoxon_Site_dawn_summary$metabolites)
+```
+
+##### Boxplots - Wilcoxon - Dawn
+```{r plot significant mtabs}
+
+x <- sig_dawn_site_mtabNames
+
+bp_wilcoxon_by_site_dawn <- temporal_long_wLimits_outliersRmv%>%
+  filter(metabolites %in% x, sample_type == "dawn")%>%
+  ggplot(aes(x=Site,y=log2_concen,color=Site),linewidth =2)+
+  geom_boxplot()+
+  facet_wrap(~metabolites,scales= "free")+
+  scale_shape_manual(values = c(21,22))+
+  scale_color_manual(values = CINAR_temporal_palette)+
+  theme_bw(base_size = 12)+
+  labs(title = "Significant (FDR Adj. p-value < 0.05) by Site (Dawn)")
+
+print(bp_wilcoxon_by_site_dawn)
+
+```
+#### Afternoon
+```{r site wilcoxon rank sum test}
+
+# Filter significant metabolites at peak_photo
+significant_metabolites <- sig_KW_mtabs %>%
+  filter(sample_type == "peak_photo") %>%
+  pull(metabolites)
+
+# Subset the original data for significant metabolites and "peak_photo" sample type
+dawn_data <- temporal_long_wLimits_outliersRmv %>%
+  filter(sample_type == "peak_photo", metabolites %in% significant_metabolites)
+
+# Perform pairwise Wilcoxon tests for each significant metabolite
+set.seed(123)
+pairwise_results <- dawn_data %>%
+  group_by(metabolites) %>%
+  summarise(
+    pairwise_wilcox = list(
+      pairwise.wilcox.test(
+        x = log2_concen,
+        g = Site,
+        p.adjust.method = "fdr"
+      )
+    ),
+    .groups = "drop"
+  )
+
+# View results
+pairwise_results <- pairwise_results %>%
+  mutate(pairwise_summary = map(pairwise_wilcox, ~ broom::tidy(.x)))
+
+# Optionally, flatten for easier inspection
+pairwise_summary <- pairwise_results %>%
+  unnest(pairwise_summary)%>%
+  filter(p.value < 0.05)%>%
+  group_by(metabolites)%>%
+  mutate(n = n(),
+         sample_type = "afternoon")
+
+wilcoxon_Site_peak_summary <- pairwise_summary
+
+# Print results
+print(wilcoxon_Site_peak_summary)
+
+paste(length(unique(wilcoxon_Site_peak_summary$metabolites)),"metabolites were found significant between sites at Dawn")
+
+sig_peak_site_mtabNames <- unique(wilcoxon_Site_peak_summary$metabolites)
+```
+
+##### Boxplots - Wilcoxon - Afternoon
+```{r plot significant mtabs}
+
+x <- sig_peak_site_mtabNames 
+
+bp_wilcoxon_by_site_peak <- temporal_long_wLimits_outliersRmv%>%
+  filter(metabolites %in% x, sample_type == "peak_photo")%>%
+  ggplot(aes(x=Site,y=log2_concen,color=Site),linewidth =2)+
+  geom_boxplot()+
+  facet_wrap(~metabolites,scales= "free")+
+  scale_shape_manual(values = c(21,22))+
+  scale_color_manual(values = CINAR_temporal_palette)+
+  theme_bw(base_size = 12)+
+  labs(title = "Significant (FDR Adj. p-value < 0.05) by Site (Afternoon)")
+
+print(bp_wilcoxon_by_site_peak)
+
+```
+#### Commonalities and Differences
+```{r Wilcoxon dawn afternoon comparison}
+
+# Join summary tables 
+
+wilcoxon_Site_summary <- rbind(wilcoxon_Site_dawn_summary,wilcoxon_Site_peak_summary)%>%
+  mutate(pairs = paste0(group1,"_",group2))
+
+# Join both vectors and remove duplicates
+unique_combined <- unique(c(sig_peak_site_mtabNames, sig_dawn_site_mtabNames))
+
+# Find common and distinct values
+common_values <- intersect(sig_peak_site_mtabNames, sig_dawn_site_mtabNames)
+distinct_values <- c(setdiff(sig_peak_site_mtabNames, sig_dawn_site_mtabNames),
+                     setdiff(sig_dawn_site_mtabNames, sig_peak_site_mtabNames))
+
+# Verify totals
+length(unique_combined) == length(common_values) + length(unique(distinct_values))
+
+```
+##### Plot common metabolites (facet sample_type)
+```{r plot common by site}
+
+# Define the output PDF file
+output_pdf <- "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/temp_outputs/Wilcoxon_Sig_FDR05_Mtabs_bySite_Common_SampleTime_20250109.pdf"
+
+# Open the PDF device
+pdf(output_pdf, width = 11, height = 8.5)
+
+# Loop through each metabolite and generate the plot
+for (metabolite in common_values) {
+  # Filter data for the current metabolite
+  plot_data <- temporal_long_wLimits_outliersRmv %>%
+    filter(metabolites == metabolite)
+  
+  # Generate the plot
+  p <- ggplot(plot_data, aes(x = Site, y = log2_concen, color = Site), linewidth = 2) +
+    geom_boxplot() +
+    facet_wrap(~sample_type, scales = "free") +
+    scale_shape_manual(values = c(21, 22)) +
+    scale_color_manual(values = CINAR_temporal_palette) +
+    theme_bw(base_size = 12) +
+    labs(
+      title = paste("Significant (FDR Adj. p-value < 0.05) by Site"),
+      subtitle = metabolite
+    )
+  
+  # Print the plot to the PDF device
+  print(p)
+}
+
+# Close the PDF device
+dev.off()
+
+# Notify the user
+cat("Plots saved to", output_pdf, "\n")
+
+```
+##### Plot unique metabolites (facet sample_type)
+```{r plot significant mtabs}
+
+# Define the output PDF file
+output_pdf <- "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/temp_outputs/Wilcoxon_Sig_FDR05_Mtabs_bySite_Unique_SampleTime_20250109.pdf"
+
+# Open the PDF device
+pdf(output_pdf, width = 11, height = 8.5)
+
+# Loop through each metabolite and generate the plot
+for (metabolite in distinct_values) {
+  # Filter data for the current metabolite
+  plot_data <- temporal_long_wLimits_outliersRmv %>%
+    filter(metabolites == metabolite)
+  
+  # Generate the plot
+  p <- ggplot(plot_data, aes(x = Site, y = log2_concen, color = Site), linewidth = 2) +
+    geom_boxplot() +
+    facet_wrap(~sample_type, scales = "free") +
+    scale_shape_manual(values = c(21, 22)) +
+    scale_color_manual(values = CINAR_temporal_palette) +
+    theme_bw(base_size = 12) +
+    labs(
+      title = paste("Significant (FDR Adj. p-value < 0.05) by Site"),
+      subtitle = metabolite
+    )
+  
+  # Print the plot to the PDF device
+  print(p)
+}
+
+# Close the PDF device
+dev.off()
+
+# Notify the user
+cat("Plots saved to", output_pdf, "\n")
+
+```
 # Manuscript figures
 ## Figure 1. Map of St. John USVI
 ```{r figure 1}
