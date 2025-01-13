@@ -339,34 +339,176 @@ temporal_long_wLimits_outliersRmv %>%
 ```
 
 ## NPOC and TN
+
+### Average concentrations
 ```{r NPOC TN}
 
-temporal_long_wLimits_outliersRmv%>%
-  pivot_longer(cols = c(NPOC, TN), names_to = "water_chem", values_to = "concen_uM")%>%
-  group_by(Site,sample_type)%>%
-  ggplot(aes(x=Site,y=concen_uM,color=Site,linetype = sample_type))+
-  geom_boxplot()+
-  facet_wrap(~water_chem, scales="free",ncol=1)+
-  theme_bw()+
-  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))
+waterChem_long <- temporal_long_wLimits_outliersRmv%>%
+  select(adaptedDervLabel,sample_type,Site,NPOC,TN,Sampling_Day, date_time)%>%
+  pivot_longer(cols = c(NPOC, TN), names_to = "water_chem", values_to = "concen_uM")
 
-temporal_long_wLimits_outliersRmv %>%
-  group_by(sample_type, Site) %>%
-  summarise(
-    across(
-      c(NPOC, TN), 
-      list(mean = ~mean(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE)), 
-      .names = "{.col}_{.fn}"
-    )
-  ) %>%
-  mutate(
-    NPOC = paste0(round(NPOC_mean, 2), " ± ", round(NPOC_sd, 2)),
-    TN = paste0(round(TN_mean, 2), " ± ", round(TN_sd, 2))
-  ) %>%
-  select(sample_type, Site, NPOC, TN)
+
+waterChem_long %>%
+  group_by(sample_type, Site, water_chem) %>%
+  summarise(mean = mean(concen_uM, na.rm = TRUE), 
+            sdev = sd(concen_uM, na.rm = TRUE))%>%
+  mutate(mean_dev = paste0(round(mean, 2), " ± ", round(sdev, 2)))%>%
+  select(sample_type, Site, mean_dev,water_chem)%>%
+  pivot_wider(names_from = water_chem, values_from = mean_dev)
+
+waterChem_long %>%
+  group_by(sample_type,water_chem) %>%
+  summarise(mean = mean(concen_uM, na.rm = TRUE), 
+            sdev = sd(concen_uM, na.rm = TRUE))%>%
+  mutate(mean_dev = paste0(round(mean, 2), " ± ", round(sdev, 2)))%>%
+  select(sample_type,mean_dev,water_chem)%>%
+  pivot_wider(names_from = water_chem, values_from = mean_dev)
 
 
 ```
+### Boxplots by Site/Time
+
+```{r Water chem boxplots}
+
+waterChem_long%>%
+  group_by(Site,sample_type)%>%
+  ggplot(aes(x=Site,y=concen_uM,color=Site,linetype = sample_type))+
+  geom_boxplot()+
+  facet_wrap(~water_chem, scales="free", ncol=2)+
+  theme_bw()+
+  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))
+
+```
+
+### Plot DOC and TN over time 
+``` {r doc tn over time}
+
+waterChem_long%>%
+  ggplot(aes(x=date_time,y=concen_uM,color=Site))+
+  geom_point(size=2,aes(shape = "sample_type"))+
+  geom_smooth(method = "loess")+
+  facet_grid(water_chem ~ Site, scales = "free")+
+  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))+
+  theme_bw()
+
+```
+
+### KW across sampling days (within site)
+```{r KW across days}
+
+# Function to perform Kruskal-Wallis test and FDR adjustment for a given subset of data
+KW_days_waterchem <- function(data, site_filter, sample_type_filter) {
+  data %>%
+    ungroup() %>%
+    filter(Site == site_filter, sample_type == sample_type_filter) %>%
+    group_by(water_chem) %>%
+    summarise(
+      Kruskal_p = kruskal.test(concen_uM ~ Sampling_Day)$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      FDR_adjusted_p = p.adjust(Kruskal_p, method = "fdr"),
+      sig_05_fdr = FDR_adjusted_p < 0.05
+    )
+}
+
+# List of subsets with corresponding labels
+subset_list <- list(
+  kw_SG_peak = list(site = "LB_seagrass", sample_type = "peak_photo"),
+  kw_SG_dawn = list(site = "LB_seagrass", sample_type = "dawn"),
+  kw_TK_peak = list(site = "Tektite", sample_type = "peak_photo"),
+  kw_TK_dawn = list(site = "Tektite", sample_type = "dawn"),
+  kw_YZ_peak = list(site = "Yawzi", sample_type = "peak_photo"),
+  kw_YZ_dawn = list(site = "Yawzi", sample_type = "dawn")
+)
+
+# Combine all results into one summary table
+set.seed(123)
+summary_table_1 <- purrr::imap_dfr(
+  subset_list,
+  ~ KW_days_waterchem(waterChem_long, .x$site, .x$sample_type) %>%
+      mutate(site_sample = .y)
+)
+
+# View the summary table
+print(summary_table_1)
+
+```
+### Pairwise Wilcoxon Rank Sum Test
+```{r water chem Site wilcoxon rank sum test}
+
+# Perform pairwise Wilcoxon tests for each significant metabolite
+
+set.seed(123)
+pairwise_results <- waterChem_long %>%
+  group_by(water_chem,sample_type) %>%
+  summarise(
+    pairwise_wilcox = list(
+      pairwise.wilcox.test(
+        x = concen_uM,
+        g = Site,
+        p.adjust.method = "fdr"
+      )
+    ),
+    .groups = "drop"
+  )
+
+# View results
+pairwise_results <- pairwise_results %>%
+  mutate(pairwise_summary = map(pairwise_wilcox, ~ broom::tidy(.x)))
+
+# Optionally, flatten for easier inspection
+pairwise_summary <- pairwise_results %>%
+  unnest(pairwise_summary)%>%
+  mutate(significant = p.value < 0.05)%>%
+  group_by(water_chem)
+
+wilcoxon_waterChem_dawn_summary <- pairwise_summary
+
+# Print results
+print(wilcoxon_waterChem_dawn_summary)
+
+```
+### Kruskal Wallis within Site
+```{r water chem KW sampling time}
+
+# Function to perform Kruskal-Wallis test and FDR adjustment for a given site
+KW_waterchem_fdr <- function(data, site_filter) {
+waterChem_long %>%
+    ungroup() %>%
+    filter(Site == site_filter) %>%
+    group_by(water_chem) %>%
+    summarise(
+      Kruskal_p = kruskal.test(concen_uM ~ sample_type)$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      FDR_adjusted_p = p.adjust(Kruskal_p, method = "fdr"),
+      sig_05_fdr = FDR_adjusted_p < 0.05
+    )
+}
+
+# List of subsets with corresponding labels
+subset_list <- list(
+  kw_SG = list(site = "LB_seagrass"),
+  kw_TK = list(site = "Tektite"),
+  kw_YZ = list(site = "Yawzi")
+)
+
+# Combine all results into one summary table
+set.seed(123)
+summary_table_2 <- purrr::imap_dfr(
+  subset_list,
+  ~ KW_waterchem_fdr(waterChem_long, .x$site) %>%
+      mutate(site = .x$site) # Use .x$site to extract the site name
+)
+
+# View the summary table
+print(summary_table_2)
+
+```
+
+
 ## Flow cytometry
 ```{r flow cytrometry}
 
@@ -484,14 +626,14 @@ subset_list <- list(
 
 # Combine all results into one summary table
 set.seed(123)
-summary_table <- purrr::imap_dfr(
+summary_table_3 <- purrr::imap_dfr(
   subset_list,
   ~ KW_samplingTime_dissimiliarty(dist_usvi_mtab.df, .x$Site) %>%
       mutate(Site = .x$Site) # Use .x$Site to extract the site name
 )
 
 # View the summary table
-print(summary_table)
+print(summary_table_3)
 
 ```
 ### Bray-Curtis Dissimilarity Statistical Comparison between sites within time
@@ -537,7 +679,7 @@ subset_list <- list(
 )
 
 # Run Kruskal-Wallis tests
-summary_table <- purrr::imap_dfr(
+summary_table_4 <- purrr::imap_dfr(
   subset_list,
   ~ run_kruskal_time_fdr(dist_usvi_mtab.df, .x$samplingTime) %>%
       mutate(samplingTime = .x$samplingTime) 
@@ -550,7 +692,7 @@ pairwise_results <- purrr::imap_dfr(
 )
 
 # View the results
-print(summary_table)  # Kruskal-Wallis test results
+print(summary_table_4)  # Kruskal-Wallis test results
 print(pairwise_results)  # Pairwise Wilcoxon test results
 
 ```
@@ -682,14 +824,14 @@ subset_list <- list(
 
 # Combine all results into one summary table
 set.seed(123)
-summary_table <- purrr::imap_dfr(
+summary_table_5 <- purrr::imap_dfr(
   subset_list,
   ~ run_kruskal_fdr(temporal_long_wLimits_outliersRmv, .x$site, .x$sample_type) %>%
       mutate(site_sample = .y)
 )
 
 # View the summary table
-print(summary_table)
+print(summary_table_5)
 
 ```
 
@@ -697,7 +839,7 @@ print(summary_table)
 ```{r count_significant_metabolites, echo=FALSE}
 
 # Calculate the count of significant metabolites
-num_significant <- summary_table %>%
+num_significant <- summary_table_5 %>%
   filter(FDR_adjusted_p < 0.05) %>%
   nrow()
 
@@ -736,16 +878,16 @@ subset_list <- list(
 
 # Combine all results into one summary table
 set.seed(123)
-summary_table <- purrr::imap_dfr(
+summary_table_6 <- purrr::imap_dfr(
   subset_list,
   ~ KW_samplingTime_fdr(temporal_long_wLimits_outliersRmv, .x$site) %>%
       mutate(site = .x$site) # Use .x$site to extract the site name
 )
 
 # View the summary table
-print(summary_table)
+print(summary_table_6)
 
-sig_FDR_mtabs <- summary_table%>%
+sig_FDR_mtabs <- summary_table_6%>%
   filter(FDR_adjusted_p < 0.05)
 
 ```
@@ -909,16 +1051,16 @@ subset_list <- list(
 
 # Combine all results into one summary table
 set.seed(123)
-summary_table <- purrr::imap_dfr(
+summary_table_7 <- purrr::imap_dfr(
   subset_list,
   ~ KW_site(temporal_long_wLimits_outliersRmv, .x$sample_type) %>%
       mutate(sample_type = .x$sample_type) # Use .x$sample_type to extract the sample_type name
 )
 
 # View the summary table
-print(summary_table)
+print(summary_table_7)
 
-sig_KW_mtabs <- summary_table%>%
+sig_KW_mtabs <- summary_table_7%>%
   filter(Kruskal_p < 0.05)
 
 ```
@@ -1082,10 +1224,10 @@ length(unique_combined) == length(common_values) + length(unique(distinct_values
 ```{r plot common by site}
 
 # Define the output PDF file
-output_pdf <- "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/temp_outputs/Wilcoxon_Sig_FDR05_Mtabs_bySite_Common_SampleTime_20250109.pdf"
+#output_pdf <- "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/temp_outputs/Wilcoxon_Sig_FDR05_Mtabs_bySite_Common_SampleTime_20250109.pdf"
 
 # Open the PDF device
-pdf(output_pdf, width = 11, height = 8.5)
+#pdf(output_pdf, width = 11, height = 8.5)
 
 # Loop through each metabolite and generate the plot
 for (metabolite in common_values) {
@@ -1113,17 +1255,17 @@ for (metabolite in common_values) {
 dev.off()
 
 # Notify the user
-cat("Plots saved to", output_pdf, "\n")
+#cat("Plots saved to", output_pdf, "\n")
 
 ```
 ##### Plot unique metabolites (facet sample_type)
 ```{r plot significant mtabs}
 
 # Define the output PDF file
-output_pdf <- "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/temp_outputs/Wilcoxon_Sig_FDR05_Mtabs_bySite_Unique_SampleTime_20250109.pdf"
+#output_pdf <- "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/temp_outputs/Wilcoxon_Sig_FDR05_Mtabs_bySite_Unique_SampleTime_20250109.pdf"
 
 # Open the PDF device
-pdf(output_pdf, width = 11, height = 8.5)
+#pdf(output_pdf, width = 11, height = 8.5)
 
 # Loop through each metabolite and generate the plot
 for (metabolite in distinct_values) {
@@ -1151,7 +1293,7 @@ for (metabolite in distinct_values) {
 dev.off()
 
 # Notify the user
-cat("Plots saved to", output_pdf, "\n")
+#cat("Plots saved to", output_pdf, "\n")
 
 ```
 # Manuscript figures
