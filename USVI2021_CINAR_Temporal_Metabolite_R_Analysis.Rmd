@@ -546,10 +546,44 @@ temporal_long_wLimits_outliersRmv %>%
 ```{r mtab summary}
 
 temporal_long_wLimits_outliersRmv %>%
-  group_by(Site, sample_type, metabolites) %>%
-  summarise(mean_concentration = mean(concentration), LOD = first(LOD), .groups = "drop") %>%
-  group_by(Site, sample_type) %>%
-  summarise(count_above_LOD = sum(mean_concentration > LOD), .groups = "drop")
+  ungroup()%>%
+  mutate(concen_forTable = case_when(concentration < LOD ~ NA, TRUE ~ concentration))%>%
+  select(metabolites, Site, sample_type,concen_forTable, LOD)%>%
+  mutate(sample_type = case_when(sample_type == "peak_photo" ~ "afternoon", 
+                                 TRUE ~ sample_type))%>%
+  group_by(metabolites, Site) %>%
+  summarise(
+    LOD = mean(LOD, na.rm = TRUE), # Use mean or another method to summarize LOD
+    median_concentration = median(concen_forTable, na.rm = TRUE))%>%
+  group_by(Site)%>%
+  summarise(aboveLOD = sum(!is.na(median_concentration)))
+
+temporal_long_wLimits_outliersRmv %>%
+  ungroup()%>%
+  mutate(concen_forTable = case_when(concentration < LOD ~ NA, TRUE ~ concentration))%>%
+  select(metabolites, Site, sample_type,concen_forTable, LOD)%>%
+  mutate(sample_type = case_when(sample_type == "peak_photo" ~ "afternoon", 
+                                 TRUE ~ sample_type))%>%
+  group_by(metabolites, Site, sample_type) %>%
+  summarise(
+    LOD = mean(LOD, na.rm = TRUE), # Use mean or another method to summarize LOD
+    median_concentration = median(concen_forTable, na.rm = TRUE))%>%
+  group_by(Site, sample_type)%>%
+  summarise(aboveLOD = sum(!is.na(median_concentration)))
+
+temporal_long_wLimits_outliersRmv %>%
+  ungroup()%>%
+  mutate(concen_forTable = case_when(concentration < LOD ~ NA, TRUE ~ concentration))%>%
+  select(metabolites, Site, sample_type,concen_forTable, LOD)%>%
+  summarise(min_conc = min(concen_forTable,na.rm = TRUE),
+            max_conc = max(concen_forTable, na.rm = TRUE))
+
+temporal_long_wLimits_outliersRmv %>%
+  ungroup()%>%
+  mutate(concen_forTable = case_when(concentration < LOD ~ NA, TRUE ~ concentration))%>%
+  select(metabolites, Site, sample_type,concen_forTable, LOD)%>%
+  arrange(concen_forTable)%>%
+  view()
 
 ```
 
@@ -911,7 +945,7 @@ temporal_long_wLimits_outliersRmv%>%
 
 ```
 
-#### Heatpmap - Significant metaboltites dawn vs. afternoon
+#### Heatmap - Significant metaboltites dawn vs. afternoon
 ```{r sig mtab heatmaps}
 
 # Create individual heatmaps for each group
@@ -940,7 +974,8 @@ heatmap1 <- temporal_long_wLimits_outliersRmv%>%
         axis.title.y = element_blank(),
         plot.margin = margin(10, 10, 10, 10),
         panel.border = element_rect(fill = NA, color = "black", size = 1),
-        panel.grid = element_blank())         # Remove grid lines
+        panel.grid = element_blank())+         # Remove grid lines
+  ggtitle("Tektite")
 
 x <- sig_FDR_mtabs%>%
   filter(site == "Yawzi")%>%
@@ -966,7 +1001,8 @@ heatmap2 <- temporal_long_wLimits_outliersRmv%>%
         axis.title.y = element_blank(),
         plot.margin = margin(10, 10, 10, 10),
         panel.border = element_rect(fill = NA, color = "black", size = 1),
-        panel.grid = element_blank())         # Remove grid lines
+        panel.grid = element_blank())+         # Remove grid lines
+  ggtitle("Yawzi")
 
 x <- sig_FDR_mtabs%>%
   filter(site == "LB_seagrass")%>%
@@ -991,10 +1027,12 @@ heatmap3 <- temporal_long_wLimits_outliersRmv%>%
         plot.margin = margin(10, 10, 10, 10),
         panel.border = element_rect(fill = NA, color = "black", size = 1),
         panel.grid = element_blank())+         # Remove grid lines
-  scale_x_discrete(labels=c('Day1','Day1',
-                            'Day2','Day2',
+  scale_x_discrete(labels=c('Day2','Day2',
                             'Day3','Day3',
-                            'Day4','Day4'))
+                            'Day4','Day4',
+                            'Day5','Day5'))+
+ ggtitle("Lameshur Bay Seagrass")
+
 
 # Create the small dawn/afternoon heatmap
 dawn_heatmap <- temporal_long_wLimits_outliersRmv%>%
@@ -1013,17 +1051,18 @@ dawn_heatmap <- temporal_long_wLimits_outliersRmv%>%
         axis.ticks.y = element_blank(),
         plot.margin = margin(2, 2, 2, 2),
         panel.border = element_rect(fill = NA, color = "black", size = 1),
-        panel.grid = element_blank())         # Remove grid lines    
+        panel.grid = element_blank())         # Remove grid lines
+
 
 # Combine the heatmaps with white space in between
 combined_plot <- heatmap1 / heatmap2 / heatmap3 / dawn_heatmap+ 
-  plot_layout(ncol = 1, heights = c(1, 1, 1,0.075)) & 
+  plot_layout(ncol = 1, heights = c(.1875, 0.375, .75,0.03)) & 
   plot_annotation(theme = theme(plot.background = element_rect(fill = "white", color = NA)))
 
 # Show the final plot
 combined_plot
 
-#ggsave("/Volumes/KujLab/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/figures/Temporally_Significant_TargetedMetabolites_log10_concentration_20241217.png",plot = last_plot(),height=8.5,width=11,units = "in",dpi=600)
+ggsave("Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/figures/Temporally_Significant_TargetedMetabolites_log10_concentration_20250128.png",plot = last_plot(),height=8.5,width=8,units = "in",dpi=600)
 
 ```
 
@@ -1375,15 +1414,154 @@ dev.off()
 
 ```
 
-## Figure 2.
+## Figure 2. All Quantified Mtab Heatmap
 ```{r figure 2}
 
+fig_s2 <- temporal_long_wLimits_outliersRmv %>%
+  ungroup()%>%
+  mutate(concen_forFigure = case_when(concentration < LOD ~ NA, TRUE ~ concentration))%>%
+  select(metabolites, Site, sample_type,concen_forFigure, LOD, LOQ)%>%
+  mutate(sample_type = case_when(sample_type == "peak_photo" ~ "afternoon", 
+                                 TRUE ~ sample_type),
+  `Site:Sampling Period` = paste(Site, sample_type)) %>%
+  group_by(metabolites,`Site:Sampling Period`)%>%
+  mutate(median_conc = median(concen_forFigure,na.rm = TRUE),
+         `Site:Sampling Period` = factor(`Site:Sampling Period`, levels = c("LB_seagrass dawn", "LB_seagrass afternoon", "Tektite dawn", "Tektite afternoon", "Yawzi dawn", "Yawzi afternoon")))%>%
+  ggplot(aes(x = `Site:Sampling Period`, y = metabolites)) +
+  geom_tile(color="black",aes(fill = median_conc)) +
+  scale_fill_viridis(trans = 'log', na.value = "white", direction = 1,
+                     breaks = c(.03,0.3,3), "Median Concentration (nM)") + 
+  theme_bw(base_size = 14)+
+  theme(legend.position = "top",text = element_text(colour = "black"))+
+  labs(x = "Site", y="Metabolite")
+
+print(fig_s2)
+
+#ggsave("Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/figures/FigureS1_Mtab_Heatmap_medianConcentration_nM_v2_20250122.pdf",plot = fig_s2,height = 11,width = 8.5,dpi = 300)
+
+
 ```
+
 ## Figure 3. 
 ```{r figure 3}
 
 ```
-## Figure 4.
+## Figure 4. 
 ```{r figure 4}
+
+```
+## Figure 4.
+```{r figure 5}
+
+```
+
+# Plots for presentations 
+##Temporal metabolites - over time
+```{r} 
+
+selected_mtab = "taurine"
+
+temporal_long_wLimits_outliersRmv %>%
+  filter(metabolites == selected_mtab) %>%
+   mutate(sample_type = case_when(sample_type == "peak_photo" ~ "afternoon", 
+                                 TRUE ~ sample_type),
+          day_time = paste(Sampling_Day,sample_type),
+          day_time = factor(day_time,levels = c("Day2 dawn", "Day2 afternoon", 
+                                                "Day3 dawn", "Day3 afternoon",
+                                                "Day4 dawn", "Day4 afternoon",
+                                                "Day5 dawn", "Day5 afternoon")))%>%
+
+  mutate(Site = factor(Site, levels = c("Tektite","Yawzi","LB_seagrass")))%>%
+  group_by(Site, day_time) %>%
+  summarize(
+    mean_concentration = mean(concentration, na.rm = TRUE),
+    sd_concentration = sd(concentration, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = day_time, y = mean_concentration, fill = Site)) + 
+  geom_errorbar(aes(ymin = mean_concentration - sd_concentration,
+                    ymax = mean_concentration + sd_concentration), 
+                width = 0.2) +
+  geom_point(size = 3, shape = 21, color = "black") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position="bottom") +
+  scale_fill_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))+
+  scale_color_manual(values = site_colors, labels = site_lookup, breaks = names(site_lookup))+
+  facet_wrap(~Site, ncol=1, scales = "free")+
+  labs(title = selected_mtab)
+
+```
+
+# Manuscript tables
+
+## Table S1 - Water Chemistry numbers and statistics 
+```{r table s1}
+
+table_s1 <- temporal_wide_outliersRmv_log2 %>%
+  select(Site,sample_type,NPOC,TN,Prochlorococcus,Synechococcus,Picoeukaryotes,Unpigmented_cells)%>%
+  mutate(sample_type = case_when(sample_type == "peak_photo" ~ "afternoon", 
+                                 TRUE ~ sample_type),
+         `Site:Sampling Period` = paste(Site, sample_type)) %>%
+  select(-c(Site, sample_type)) %>%
+  pivot_longer(cols = c(NPOC,TN,Prochlorococcus,Synechococcus,Picoeukaryotes,Unpigmented_cells), 
+               names_to = "Measurement", 
+               values_to = "Amount")%>%
+  group_by(`Site:Sampling Period`, Measurement) %>%
+  summarise(mean = mean(Amount, na.rm = TRUE), 
+            sdev = sd(Amount, na.rm = TRUE))%>%
+  mutate(mean_dev = paste0(round(mean, 2), " ± ", round(sdev, 2)))%>%
+  mutate(Analysis = case_when(Measurement %in% c("NPOC","TN") ~ "Nutrients",
+                                 TRUE ~ "FCM"),
+         Units = case_when(Measurement %in% c("NPOC","TN") ~ "uM",
+                                 TRUE ~ "counts"))%>%
+  select(Analysis,Units,`Site:Sampling Period`, mean_dev,Measurement)%>%
+  pivot_wider(names_from = `Site:Sampling Period`, values_from = mean_dev)%>%
+  arrange(desc(Analysis))
+
+write.csv(table_s1, "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/csv outputs/TableS1_Nutrients_FCM_Table_byGroup.csv")
+
+```
+
+## Table S2 - Quantified / Detected Metabolites
+```{r table s2}
+
+
+table_s2 <- temporal_long_wLimits_outliersRmv %>%
+  ungroup()%>%
+  mutate(concen_forTable = case_when(concentration < LOD ~ NA, TRUE ~ concentration))%>%
+  select(metabolites, Site, sample_type,concen_forTable, LOD, LOQ)%>%
+  mutate(sample_type = case_when(sample_type == "peak_photo" ~ "afternoon", 
+                                 TRUE ~ sample_type),
+         `Site:Sampling Period` = paste(Site, sample_type)) %>%
+  select(-c(Site, sample_type)) %>%
+  group_by(metabolites, `Site:Sampling Period`) %>%
+  summarise(
+    LOD = mean(LOD, na.rm = TRUE), # Use mean or another method to summarize LOD
+    LOQ = mean(LOQ, na.rm = TRUE), # Use mean or another method to summarize LOQ
+    mean_nM = mean(concen_forTable, na.rm = TRUE),
+    sd_nM = sd(concen_forTable, na.rm = TRUE),
+    concen_nM = paste0(round(mean_nM, 3), " ± ", round(sd_nM, 3)),
+    .groups = "drop"
+  ) %>%
+  select(-c(mean_nM, sd_nM)) %>%
+  pivot_wider(
+    names_from = `Site:Sampling Period`,
+    values_from = concen_nM
+  )%>%
+  mutate(LOD = round(LOD,3), 
+         LOQ = round(LOQ,3))%>%
+  rename(`LOD (nM)` = LOD, 
+         `LOQ (nM)` = LOQ,
+         `Metabolite name` = metabolites)%>%
+  rowwise() %>%
+  mutate(
+    `n groups above LOD` = sum(!str_detect(c_across(starts_with("LB_") | starts_with("Tektite") | starts_with("Yawzi")), "NA"))
+  ) %>%
+  ungroup()
+
+#need to fix this, the plus +/- are messing everything up agian
+
+#write.csv(table_s2, "Z:/Brianna/Projects/2022_0328_CINAR_BC/BC_CoralSeagrass_Temporal/USVI_2021_CINAR_temporal_R_Script/csv outputs/TableS2_Metabolite_Quantification_Table_byGroup.csv")
 
 ```
